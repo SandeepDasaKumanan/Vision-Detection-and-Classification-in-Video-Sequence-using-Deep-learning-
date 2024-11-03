@@ -1,0 +1,270 @@
+import tkinter as tk
+from tkinter import messagebox, ttk
+import pandas as pd
+
+class InventoryApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Inventory Management System")
+        self.root.geometry("1800x1000")
+
+        # Load data from Excel
+        self.load_data()
+
+        # Create the main layout
+        self.create_main_layout()
+
+        # Initialize the search delay variable
+        self.search_delay = None
+
+        # Store scanned items for GIprint
+        self.scanned_items = []
+
+        # Entry widget for editing
+        self.edit_entry = None
+        self.editing_item = None
+        self.editing_column = None
+
+    def load_data(self):
+        try:
+            # Load the Excel file into a DataFrame
+            self.data = pd.read_excel('BARCODE.xlsx')
+            self.data.set_index('BAR CODE', inplace=True)
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not load data: {e}")
+            self.root.quit()
+
+    def create_main_layout(self):
+        # Initialize the buttons dictionary
+        self.buttons = {}
+
+        # Top frame for navigation buttons
+        self.button_frame = tk.Frame(self.root, bg='#bcceeb')
+        self.button_frame.pack(side=tk.TOP, fill=tk.X)
+
+        # Add navigation buttons to the top frame
+        self.buttons['GOOD IN'] = tk.Button(self.button_frame, text="GOOD IN", command=self.show_good_in)
+        self.buttons['GOOD IN'].pack(side=tk.LEFT, padx=10, pady=5)
+
+        self.buttons['GOOD OUT'] = tk.Button(self.button_frame, text="GOOD OUT", command=self.show_good_out)
+        self.buttons['GOOD OUT'].pack(side=tk.LEFT, padx=10, pady=5)
+
+        self.buttons['GOOD DAM/RET'] = tk.Button(self.button_frame, text="GOOD DAM/RET", command=self.show_good_dam_ret)
+        self.buttons['GOOD DAM/RET'].pack(side=tk.LEFT, padx=10, pady=5)
+
+        self.buttons['INVENTORY'] = tk.Button(self.button_frame, text="INVENTORY", command=self.show_inventory)
+        self.buttons['INVENTORY'].pack(side=tk.LEFT, padx=10, pady=5)
+
+        # Right main content area
+        self.content_frame = tk.Frame(self.root, bg="#bcceeb")
+        self.content_frame.pack(side=tk.BOTTOM, expand=True, fill=tk.BOTH)
+
+        # Initially display the GOOD IN page
+        self.show_good_in()
+
+
+    def clear_content_frame(self):
+        # Clear the right content area before displaying a new page
+        for widget in self.content_frame.winfo_children():
+            widget.destroy()
+
+    def highlight_button(self, active_button):
+        # Reset all button colors
+        for name, button in self.buttons.items():
+            button.config(bg='#f0f0f0')  # Default button color
+
+        # Highlight the active button
+        active_button.config(bg='#c0e0f0')  # Highlight color for active button
+
+    def show_good_in(self):
+        # GOOD IN Page
+        self.clear_content_frame()
+        self.highlight_button(self.buttons['GOOD IN'])
+
+        # Label for GOOD IN Page
+        label = tk.Label(self.content_frame, text="GOOD IN Page", font=("Arial", 20), bg="#bcceeb")
+        label.pack(pady=10)
+
+        # Create a frame for input fields on the right
+        right_frame = tk.Frame(self.content_frame, bg="#bcceeb")
+        right_frame.pack(side=tk.RIGHT, padx=20, pady=20)
+
+        # SUPPLIER NAME Label and Entry
+        supplier_label = tk.Label(right_frame, text="SUPPLIER NAME", bg="#bcceeb")
+        supplier_label.pack(pady=(5, 0))  # Add some padding
+        self.supplier_entry = tk.Entry(right_frame, width=30)
+        self.supplier_entry.pack(pady=5)
+
+        # PURCHASE NO Label and Entry
+        purchase_no_label = tk.Label(right_frame, text="PURCHASE NO", bg="#bcceeb")
+        purchase_no_label.pack(pady=(5, 0))  # Add some padding
+        self.purchase_no_entry = tk.Entry(right_frame, width=30)
+        self.purchase_no_entry.pack(pady=5)
+
+        # Barcode entry field
+        barcode_label = tk.Label(right_frame, text="BAR CODE", bg="#bcceeb")
+        barcode_label.pack(pady=(5, 0))  # Add some padding
+        self.barcode_entry = tk.Entry(right_frame, width=30)
+        self.barcode_entry.pack(pady=5)
+
+        # Bind the key release event to the barcode entry
+        self.barcode_entry.bind("<KeyRelease>", self.on_barcode_entry)
+
+        # Table setup for displaying product information
+        self.tree = ttk.Treeview(self.content_frame, columns=("ITEM", "DESCRIPTION", "SIZE", "PACK", "QTY", "EXPIRY DATE"), show='headings')
+
+        # Set column headings and widths
+        self.tree.heading("ITEM", text="ITEM")
+        self.tree.heading("DESCRIPTION", text="DESCRIPTION")
+        self.tree.heading("SIZE", text="SIZE")
+        self.tree.heading("PACK", text="PACK")
+        self.tree.heading("QTY", text="QTY")
+        self.tree.heading("EXPIRY DATE", text="EXPIRY DATE")
+
+        # Adjusting the column widths and center-aligning text
+        self.tree.column("ITEM", width=100, anchor='center')               # Width for ITEM column
+        self.tree.column("DESCRIPTION", width=250, anchor='center')         # Increased width for DESCRIPTION column
+        self.tree.column("SIZE", width=70, anchor='center')                 # Reduced width for SIZE column
+        self.tree.column("PACK", width=70, anchor='center')                 # Reduced width for PACK column
+        self.tree.column("QTY", width=70, anchor='center')                  # Reduced width for QTY column
+        self.tree.column("EXPIRY DATE", width=100, anchor='center')         # Width for EXPIRY DATE column
+
+        self.tree.pack(pady=20, fill=tk.BOTH, expand=True)
+
+        # Bind double-click event to make cells editable
+        self.tree.bind("<Double-1>", self.on_treeview_double_click)
+        # Label for displaying scanned barcode details
+        self.scanned_barcode_details_label = tk.Label(right_frame, text="", bg="#bcceeb")
+        self.scanned_barcode_details_label.pack(pady=(5, 0))
+
+        # DONE button
+        done_button = tk.Button(self.content_frame, text="DONE", command=self.done_scanning)
+        done_button.pack(pady=10)
+    def on_treeview_double_click(self, event):
+        # Get the item and column clicked
+        region = self.tree.identify("region", event.x, event.y)
+        if region == "cell":
+            item_id = self.tree.identify_row(event.y)
+            column_id = self.tree.identify_column(event.x)
+
+            # Allow editing for any column
+            self.start_editing(item_id, column_id)
+
+    def start_editing(self, item_id, column_id):
+        # Get the current value in the cell
+        current_value = self.tree.item(item_id)["values"][int(column_id.strip("#")) - 1]
+
+        # Create an Entry widget to edit the value
+        self.edit_entry = tk.Entry(self.content_frame)
+        self.edit_entry.insert(0, current_value)
+        self.edit_entry.place(x=self.tree.winfo_x() + self.tree.bbox(item_id, column=column_id)[0] + 2,
+                               y=self.tree.winfo_y() + self.tree.bbox(item_id, column=column_id)[1] + 2,
+                               width=self.tree.bbox(item_id, column=column_id)[2] - 4)
+
+        # Focus on the Entry widget
+        self.edit_entry.focus()
+        self.editing_item = item_id
+        self.editing_column = int(column_id.strip("#")) - 1  # Convert column_id to index
+
+        # Bind events for saving and cancelling the edit
+        self.edit_entry.bind("<Return>", self.save_edit)
+        self.edit_entry.bind("<FocusOut>", self.cancel_edit)
+
+    def save_edit(self, event):
+        # Save the new value back to the Treeview
+        new_value = self.edit_entry.get()
+        current_values = list(self.tree.item(self.editing_item)["values"])
+        current_values[self.editing_column] = new_value
+        self.tree.item(self.editing_item, values=current_values)
+
+        # Destroy the Entry widget
+        self.edit_entry.destroy()
+        self.edit_entry = None
+
+    def cancel_edit(self, event):
+        # Destroy the Entry widget without saving
+        if self.edit_entry:
+            self.edit_entry.destroy()
+            self.edit_entry = None
+
+    def on_barcode_entry(self, event):
+        # Cancel the previous scheduled search if it exists
+        if self.search_delay:
+            self.root.after_cancel(self.search_delay)
+
+        # Schedule a new search after 500 milliseconds
+        self.search_delay = self.root.after(500, self.search_good_in_item)
+
+    def search_good_in_item(self):
+        barcode = self.barcode_entry.get().strip()
+        normalized_barcode = barcode.lower()
+
+        # Check if the normalized barcode exists in the entire index (case-insensitive)
+        if any(normalized_barcode == str(index).lower() for index in self.data.index):
+            # Find the matching barcode (case-insensitive)
+            matched_barcode = next(index for index in self.data.index if str(index).lower() == normalized_barcode)
+
+            # Retrieve item information from the DataFrame
+            item_info = self.data.loc[matched_barcode]
+
+            # Prepare data to insert into the table
+            item = item_info['ITEM']
+            description = item_info['DESCRIPTION']
+            size = item_info['SIZE']
+            pack_info = item_info['PACK']
+
+            # Insert data into the table as a new row
+            # Ensure the values are in the correct order
+            self.tree.insert("", "end", values=(item, description, size, pack_info, "", ""))
+
+            # Add the scanned item to the list for GIprint (excluding expiry date for manual entry)
+            self.scanned_items.append((item, description, size, pack_info, "", ""))
+            # Update the scanned barcode details label with full information
+            self.scanned_barcode_details_label.config(text=f"Details:\n ITEM:{item},\n DESCRIPTION: {description},\n SIZE: {size},\n PACK: {pack_info}")
+
+            # Clear the entry field
+            self.barcode_entry.delete(0, tk.END)
+        else:
+            messagebox.showwarning("Warning", "Barcode not found in the inventory.")
+
+    def done_scanning(self):
+        # Create a DataFrame from the scanned items
+        columns = ["ITEM","DESCRIPTION", "SIZE", "PACK", "QTY", "EXPIRY DATE"]
+        df = pd.DataFrame(self.scanned_items, columns=columns)
+
+        try:
+            # Write to Excel file
+            with pd.ExcelWriter('GIprint.xlsx', mode='a', if_sheet_exists='replace') as writer:
+                df.to_excel(writer, sheet_name='Sheet1', index=False, header=False, startrow=writer.sheets['Sheet1'].max_row)
+            messagebox.showinfo("Success", "Scanned items saved to GIprint.xlsx.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not save data: {e}")
+
+    def show_good_out(self):
+        # GOOD OUT Page
+        self.clear_content_frame()
+        self.highlight_button(self.buttons['GOOD OUT'])
+
+        label = tk.Label(self.content_frame, text="GOOD OUT Page", font=("Arial", 20), bg="#bcceeb")
+        label.pack(pady=10)
+
+    def show_good_dam_ret(self):
+        # GOOD DAM/RET Page
+        self.clear_content_frame()
+        self.highlight_button(self.buttons['GOOD DAM/RET'])
+
+        label = tk.Label(self.content_frame, text="GOOD DAM/RET Page", font=("Arial", 20), bg="#bcceeb")
+        label.pack(pady=10)
+
+    def show_inventory(self):
+        # INVENTORY Page
+        self.clear_content_frame()
+        self.highlight_button(self.buttons['INVENTORY'])
+
+        label = tk.Label(self.content_frame, text="INVENTORY Page", font=("Arial", 20), bg="#bcceeb")
+        label.pack(pady=10)
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = InventoryApp(root)
+    root.mainloop()
